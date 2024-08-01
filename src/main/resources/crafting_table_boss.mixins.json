@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "me.Thelnfamous1.crafting_table_boss.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "crafting_table_boss.refmap.json",
+  "mixins": [
+    "MeleeAttackGoalAccessor",
+    "RangedAttackGoalAccessor"
+  ],
+  "client": [],
+  "minVersion": "0.8.5"
+}
