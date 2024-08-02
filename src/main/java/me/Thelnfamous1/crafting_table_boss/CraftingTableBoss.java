@@ -26,7 +26,7 @@ public class CraftingTableBoss {
 
     private static final DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(ForgeRegistries.ENTITY_TYPES, MODID);
 
-    public static final float CTG_SCALE = 1.0F;
+    public static final float CTG_SCALE = 1.625F;
     public static final RegistryObject<EntityType<CraftingTableGolem>> CRAFTING_TABLE_GOLEM = registerEntityType("crafting_table_golem",
             EntityType.Builder.of(CraftingTableGolem::new, MobCategory.MONSTER)
                     .sized(2.0F * CTG_SCALE, (52.0F / 16.0F) * CTG_SCALE)

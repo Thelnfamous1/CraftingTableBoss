@@ -20,6 +20,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraftforge.entity.IEntityAdditionalSpawnData;
 import net.minecraftforge.network.NetworkHooks;
 
@@ -52,6 +53,12 @@ public class ThrownBlock extends AbstractHurtingProjectile implements IEntityAdd
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_START_POS, BlockPos.ZERO);
+    }
+
+    @Override
+    protected void onHit(HitResult pResult) {
+        super.onHit(pResult);
+        this.playSound(this.blockState.getSoundType().getHitSound());
     }
 
     @Override

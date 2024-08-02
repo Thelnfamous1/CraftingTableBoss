@@ -4,6 +4,8 @@ import me.Thelnfamous1.crafting_table_boss.CraftingTableBoss;
 import me.Thelnfamous1.crafting_table_boss.mixin.MeleeAttackGoalAccessor;
 import me.Thelnfamous1.crafting_table_boss.mixin.RangedAttackGoalAccessor;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -20,6 +22,7 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
@@ -28,6 +31,7 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.RangedAttackMob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -90,11 +94,16 @@ public class CraftingTableGolem extends Monster implements IAnimatable, RangedAt
         }
     }
 
-    private void setActiveAttackType(AttackType attackType){
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new CTGBodyRotationControl(this);
+    }
+
+    protected void setActiveAttackType(AttackType attackType){
         this.entityData.set(ACTIVE_ATTACK_TYPE, (byte)attackType.ordinal());
     }
 
-    private AttackType getActiveAttackType(){
+    public AttackType getActiveAttackType(){
         return AttackType.byOrdinal(this.entityData.get(ACTIVE_ATTACK_TYPE));
     }
 
@@ -153,6 +162,17 @@ public class CraftingTableGolem extends Monster implements IAnimatable, RangedAt
     }
 
     @Override
+    public void tick() {
+        super.tick();
+
+        // custom attack animation
+        AttackType attackType = this.getActiveAttackType();
+        if(attackType != AttackType.NONE && this.getActiveAttackType().getAttackPoint() == this.attackTicker){
+            this.getActiveAttackType().performAttack(this);
+        }
+    }
+
+    @Override
     public void readAdditionalSaveData(CompoundTag pCompound) {
         super.readAdditionalSaveData(pCompound);
         if (this.hasCustomName()) {
@@ -188,12 +208,6 @@ public class CraftingTableGolem extends Monster implements IAnimatable, RangedAt
             this.heal(1.0F);
         }
         this.bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
-
-        // custom attack animation
-        AttackType attackType = this.getActiveAttackType();
-        if(attackType != AttackType.NONE && this.getActiveAttackType().getAttackPoint() == this.attackTicker){
-            this.getActiveAttackType().performAttack(this);
-        }
     }
 
     @Override
@@ -254,11 +268,37 @@ public class CraftingTableGolem extends Monster implements IAnimatable, RangedAt
         }
         if(!this.level.isClientSide && ForgeEventFactory.getMobGriefingEvent(this.level, this)){
             for(BlockPos blockPos : BlockPos.betweenClosed(Mth.floor(attackBox.minX), Mth.floor(attackBox.minY), Mth.floor(attackBox.minZ), Mth.floor(attackBox.maxX), Mth.floor(attackBox.maxY), Mth.floor(attackBox.maxZ))) {
-                BlockState blockState = level.getBlockState(blockPos);
+                BlockState blockState = this.level.getBlockState(blockPos);
                 if (!blockState.isAir() && CraftingTableGolem.canDestroy(blockState)) {
                     this.level.destroyBlock(blockPos, true, this);
                 }
             }
+        }
+        this.playSound(SoundEvents.GENERIC_EXPLODE, (float) (attackBox.getSize() * 0.5F), (1.0F + (this.level.random.nextFloat() - this.level.random.nextFloat()) * 0.2F) * 0.7F);
+        if(this.level.isClientSide){
+            Vec3 center = attackBox.getCenter();
+            double radius = attackBox.getSize() * 0.5;
+            Vec3 particlePos = center.subtract(0, (attackBox.getYsize() * 0.5F) - 0.5F, 0);
+            BlockPos blockPos = new BlockPos(particlePos);
+            if(!this.level.getBlockState(blockPos.below()).getMaterial().isReplaceable()){
+                particlePos = new Vec3(particlePos.x, blockPos.getY(), particlePos.z);
+                spawnParticlesInCircle(this.level, ParticleTypes.CAMPFIRE_COSY_SMOKE, particlePos.x, particlePos.y, particlePos.z, radius, Mth.floor(Mth.TWO_PI * radius));
+            }
+        }
+    }
+
+    public static void spawnParticlesInCircle(LevelAccessor world, ParticleOptions particleType, double x, double y, double z, double xzRadius, int amount) {
+        int counter = 0;
+        while (counter < amount) {
+            double targetX = x + Math.cos((Mth.TWO_PI / amount) * counter) * xzRadius;
+            double targetZ = z + Math.sin((Mth.TWO_PI / amount) * counter) * xzRadius;
+            Vec3 step = new Vec3(targetX - x, 0, targetZ - z).normalize().scale(0.1D);
+            world.addParticle(particleType,
+                    x,
+                    y,
+                    z,
+                    step.x, 0.01D, step.z);
+            counter = counter + 1;
         }
     }
 
@@ -267,7 +307,7 @@ public class CraftingTableGolem extends Monster implements IAnimatable, RangedAt
     }
 
     protected AABB createAttackBox() {
-        double attackRadius = this.getBbWidth() * 0.5F;
+        double attackRadius = 5.0F;
         Vec3 baseOffset = new Vec3(0.0D, 0.0D, this.getBbWidth() * 0.5F).yRot(-this.getYHeadRot() * Mth.DEG_TO_RAD);
         Vec3 attackOffset = new Vec3(0.0D, 0.0D, attackRadius).yRot(-this.getYHeadRot() * Mth.DEG_TO_RAD);
         double attackSize = attackRadius * 2;
@@ -366,7 +406,6 @@ public class CraftingTableGolem extends Monster implements IAnimatable, RangedAt
         protected void checkAndPerformAttack(LivingEntity pEnemy, double pDistToEnemySqr) {
             double attackReachSqr = this.getAttackReachSqr(pEnemy);
             if (pDistToEnemySqr <= attackReachSqr && ((MeleeAttackGoalAccessor)this).crafting_table_boss$getTicksUntilNextAttack() <= 0) {
-                CraftingTableBoss.LOGGER.info("Starting {} attack for {}", AttackType.SMASH, this.mob);
                 this.resetAttackCooldown();
                 this.golem.setActiveAttackType(AttackType.SMASH);
             }
